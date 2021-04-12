@@ -28,6 +28,7 @@ pub enum Cmd {
     Key(cmd::key::Cmd),
     Update(cmd::update::Cmd),
     Server(cmd::server::Cmd),
+    Add(cmd::add::Cmd),
 }
 
 /// An emptye timestamp function for when timestamp should not be included in
