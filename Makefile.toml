@@ -1,10 +1,16 @@
 [config]
-additional_profiles = ["klkgw", "ramips_24kec", "dragino", "mtcdt"]
+additional_profiles = ["klkgw", "ramips_24kec", "dragino", "mtcdt", "raspi01", "raspi234"]
 default_to_workspace = false
 
 [env]
 TAR = { source = "${CARGO_MAKE_RUST_TARGET_OS}", default_value = "linux", mapping = {"macos" = "gtar", "linux" = "tar" } }
 AR = "ar"
+
+[env.raspi01]
+CROSS_TARGET = "arm-unknown-linux-gnueabihf"
+
+[env.raspi234]
+CROSS_TARGET = "armv7-unknown-linux-gnueabihf"
 
 [env.klkgw]
 CROSS_TARGET = "armv7-unknown-linux-musleabihf"
@@ -78,6 +84,42 @@ script = '''
 		${TAR} --numeric-owner --group=0 --owner=0 -czf ../helium-gateway-v${CARGO_MAKE_CRATE_VERSION}-${CARGO_MAKE_PROFILE}.ipk ./debian-binary ./data.tar.gz ./control.tar.gz
 	fi
 	cd ${CARGO_MAKE_WORKING_DIRECTORY}
+'''
+
+[tasks.deb]
+description = "Builds a deb package for debian based targets"
+category = "Package"
+dependencies = ["cross"]
+condition = { env_set = ["CROSS_TARGET"] }
+env = { "DEB_BUILD_DIR" = "target/deb/${CARGO_MAKE_PROFILE}", "DEB_SRC_DIR" = "package/${CARGO_MAKE_PROFILE}" }
+script = '''
+	# make base folder
+	mkdir -p ${DEB_BUILD_DIR}
+
+	# install data files
+	cp -R ${DEB_SRC_DIR}/data ${DEB_BUILD_DIR}
+
+	# inject default.toml
+	cp -R config/default.toml ${DEB_BUILD_DIR}/data/etc/helium_gateway
+
+	# install binary
+	mkdir -p ${DEB_BUILD_DIR}/data/usr/bin
+	cp target/${CROSS_TARGET}/release/helium_gateway ${DEB_BUILD_DIR}/data/usr/bin
+
+	# install control files
+	mkdir -p ${DEB_BUILD_DIR}/control
+	export CARGO_MAKE_PROFILE CARGO_MAKE_CRATE_VERSION 
+	for control_file in service preinst postinst prerm; do
+	    envsubst < ${DEB_SRC_DIR}/control/${control_file} > ${DEB_BUILD_DIR}/control/${control_file}
+	    chmod +x ${DEB_BUILD_DIR}/control/${control_file}
+	done
+
+	# create manifest
+	envsubst < config/metadata.deb.toml > ${DEB_BUILD_DIR}/Cargo.toml
+
+    # package together
+	cd ${DEB_BUILD_DIR}
+	cargo deb -v --no-build --target ${CROSS_TARGET} -o ../helium-gateway-v${CARGO_MAKE_CRATE_VERSION}-${CARGO_MAKE_PROFILE}.deb
 '''
 
 [tasks.ci]
